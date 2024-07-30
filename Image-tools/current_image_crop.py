@@ -11,6 +11,7 @@ EDGE_COUNT_THRESHOLD = 2000  # Edge count threshold. Typical values: min=500, av
 WHITE_BG_THRESHOLD = 240  # RGB threshold to consider a pixel as white. Typical values: min=200, avg=240, max=255
 WHITE_BG_PERCENTAGE = 0.9  # Percentage of white pixels in the corners to consider background as white. Typical values: min=0.5, avg=0.9, max=1.0
 
+
 def crop_to_content_with_alpha(image):
     """ 
     Crop image to content based on transparency (alpha channel).
@@ -40,6 +41,8 @@ def crop_to_content_with_alpha(image):
     # Return the original image if no transparency is found
     return image
 
+
+
 def crop_to_content_without_alpha(image_path):
     """ 
     Crop image to content based on contours (for images without alpha channel).
@@ -53,8 +56,8 @@ def crop_to_content_without_alpha(image_path):
     # Open the image using PIL
     image = Image.open(image_path)
     
-    # Convert the PIL image to an OpenCV image (NumPy array) with alpha channel
-    open_cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGBA2BGRA)
+    # Convert the PIL image to an OpenCV image (NumPy array)
+    open_cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     
     # Convert the OpenCV image to grayscale
     gray = cv2.cvtColor(open_cv_image, cv2.COLOR_BGR2GRAY)
@@ -71,20 +74,36 @@ def crop_to_content_without_alpha(image_path):
     # Find contours in the edge-detected image
     contours, _ = cv2.findContours(dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
-    # Get the bounding box of the largest contour
-    x, y, w, h = cv2.boundingRect(contours[0])
+    # Initialize variables to hold the combined bounding box coordinates
+    min_x, min_y = float('inf'), float('inf')
+    max_x, max_y = float('-inf'), float('-inf')
     
-    # Crop the OpenCV image to the bounding box
-    cropped_image = open_cv_image[y:y+h, x:x+w]
-    
-    # Convert the cropped OpenCV image back to RGB mode for PIL compatibility
-    cropped_image_rgb = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB)
-    
-    # Convert the cropped image to a PIL image
-    pil_cropped_image = Image.fromarray(cropped_image_rgb)
-    
-    # Return the cropped PIL image
-    return pil_cropped_image
+    # Loop over the contours to find the bounding box
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        print(f'{x=}, {y=}, {w=}, {h=}')
+        min_x = min(min_x, x)
+        min_y = min(min_y, y)
+        max_x = max(max_x, x + w)
+        max_y = max(max_y, y + h)
+        print(f'{min_x=}, {max_y=}, {max_x=}, {min_y=}')
+    # Ensure we have valid coordinates to crop
+    if min_x < max_x and min_y < max_y:
+        # Crop the OpenCV image to the combined bounding box
+        cropped_image = open_cv_image[min_y:max_y, min_x:max_x]
+        
+        # Convert the cropped OpenCV image back to RGB mode for PIL compatibility
+        cropped_image_rgb = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2RGB)
+        
+        # Convert the cropped image to a PIL image
+        pil_cropped_image = Image.fromarray(cropped_image_rgb)
+        
+        # Return the cropped PIL image
+        return pil_cropped_image
+    else:
+        # Return the original image if no contours are found
+        return image
+
 
 def is_image_vertical(image):
     """ Check if the image is vertical (portrait orientation) """
@@ -95,6 +114,7 @@ def rotate_to_vertical(image):
     """ Rotate image to make it vertical if it's not already """
     if not is_image_vertical(image):
         image = image.rotate(90, expand=True)
+        print("Image Rotated")
     return image
 
 def has_transparency(image):
@@ -192,6 +212,8 @@ def process_image(image_path, transparent_output_folder, white_bg_output_folder,
     """ Process a single image: crop, resize, and save it """
     filename = os.path.basename(image_path)
     image = Image.open(image_path).convert('RGBA')
+    print(f"{image_path=}")
+
 
     # Check if the image has transparency
     if has_transparency(image):
@@ -236,7 +258,7 @@ def process_images_in_folder_concurrent(input_folder, transparent_output_folder,
 
     with ThreadPoolExecutor() as executor:
         futures = [executor.submit(process_image, image_path, transparent_output_folder, white_bg_output_folder, canvas_width, canvas_height, fixed_margin) for image_path in image_paths]
-        with tqdm(total=len(futures), desc="Processing images") as progress_bar:
+        with tqdm(total=len(futures), desc="Processing images\n") as progress_bar:
             for future in as_completed(futures):
                 try:
                     future.result()
@@ -246,7 +268,7 @@ def process_images_in_folder_concurrent(input_folder, transparent_output_folder,
                     progress_bar.update(1)
 
 if __name__ == "__main__":
-    input_folder = r"C:\Users\Richard\Documents\We Cloud Data\Watches\Finishing_scrapes\IWC\images"
-    transparent_output_folder = r"C:\Users\Richard\Documents\We Cloud Data\Watches\Finishing_scrapes\IWC\transparent_images"
-    white_bg_output_folder = r"C:\Users\Richard\Documents\We Cloud Data\Watches\Finishing_scrapes\IWC\white_bg_images"
+    input_folder = r"D:\DS BootCamp\Real Client Project\WCC\deduped\hyt\original_images"
+    transparent_output_folder = r"D:\DS BootCamp\Real Client Project\WCC\deduped\hyt\transparent_images"
+    white_bg_output_folder = r"D:\DS BootCamp\Real Client Project\WCC\deduped\hyt\white_bg_images"
     process_images_in_folder_concurrent(input_folder, transparent_output_folder, white_bg_output_folder)
