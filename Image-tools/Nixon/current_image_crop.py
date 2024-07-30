@@ -12,6 +12,7 @@ WHITE_BG_THRESHOLD = 240  # RGB threshold to consider a pixel as white. Typical 
 WHITE_BG_PERCENTAGE = 0.9  # Percentage of white pixels in the corners to consider background as white. Typical values: min=0.5, avg=0.9, max=1.0
 
 
+
 def crop_to_content_with_alpha(image):
     """ 
     Crop image to content based on transparency (alpha channel).
