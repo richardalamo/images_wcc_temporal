@@ -1,0 +1,77 @@
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+# Parameters
+BLUR = 21
+CANNY_THRESH_1 = 10
+CANNY_THRESH_2 = 150
+MASK_DILATE_ITER = 10
+MASK_ERODE_ITER = 10
+MASK_COLOR = (0.0, 0.0, 1.0)  # Background color in BGR format
+def process_image(img_path, output_path):
+    img = cv2.imread(img_path)
+    if img is None:
+        print(f"Error: Unable to load image from {img_path}. Check the file path.")
+        return
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Edge detection
+    edges = cv2.Canny(gray, CANNY_THRESH_1, CANNY_THRESH_2)
+    edges = cv2.dilate(edges, None)
+    edges = cv2.erode(edges, None)
+    # Find contours in edges, sort by area
+    contour_info = []
+    # Compatibility check for OpenCV version
+    if cv2.__version__.startswith('4'):
+        # OpenCV 4.x
+        contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    else:
+        # OpenCV 3.x
+        _, contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    for c in contours:
+        contour_info.append((
+            c,
+            cv2.isContourConvex(c),
+            cv2.contourArea(c),
+        ))
+    contour_info = sorted(contour_info, key=lambda c: c[2], reverse=True)
+    if contour_info:
+        max_contour = contour_info[0]
+        # Create empty mask, draw filled polygon on it corresponding to largest contour
+        mask = np.zeros(edges.shape, dtype=np.uint8)
+        cv2.fillConvexPoly(mask, max_contour[0], 255)
+        # Smooth mask, then blur it
+        mask = cv2.dilate(mask, None, iterations=MASK_DILATE_ITER)
+        mask = cv2.erode(mask, None, iterations=MASK_ERODE_ITER)
+        mask = cv2.GaussianBlur(mask, (BLUR, BLUR), 0)
+        # Convert mask to 3-channel alpha mask
+        mask_stack = np.dstack([mask]*3)  # 3-channel mask for RGB
+        # Convert image and mask to float for blending
+        img = img.astype('float32') / 255.0
+        mask_stack = mask_stack.astype('float32') / 255.0
+        # Create the output image with an alpha channel
+        output = np.zeros((img.shape[0], img.shape[1], 4), dtype='uint8')
+        output[..., :3] = (mask_stack * img * 255).astype('uint8')  # RGB channels
+        output[..., 3] = (mask_stack.max(axis=2) * 255).astype('uint8')  # Alpha channel
+        # Save the result as a PNG to preserve transparency
+        cv2.imwrite(output_path, output)
+        print(f"Masked image saved as {output_path}")
+    else:
+        print(f"No contours found in image {img_path}.")
+def process_folder(input_folder, output_folder):
+    # Create output folder if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    # Process each image in the folder
+    for filename in os.listdir(input_folder):
+        img_path = os.path.join(input_folder, filename)
+        if os.path.isfile(img_path):
+            # Generate output path
+            output_filename = os.path.splitext(filename)[0] + '_processed.png'
+            output_path = os.path.join(output_folder, output_filename)
+            # Process the image
+            process_image(img_path, output_path)
+if __name__ == "__main__":
+    input_folder = r'C:\BeamData\Project-Watches\Original_images'
+    output_folder = r'C:\BeamData\Project-Watches\Original_images\Output'
+    process_folder(input_folder, output_folder)
